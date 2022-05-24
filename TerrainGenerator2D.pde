@@ -15,11 +15,13 @@ float noise_increment = 0.01;  // for Perlin noise generation
 int step_size = 10;  // marching squares cell size
 float contour_height = 0.35;  // for thresholding with marching squares
 boolean draw_contour = false;  // for some user control
+boolean interpolate_contours = false;  // for some user control
 
 
 void setup() {
   size(1280, 640);
   //fullScreen();
+  
   color_map_ = createImage(width, height, RGB);
   height_map_ = createImage(width, height, ALPHA);
   
@@ -38,7 +40,7 @@ void setup() {
       float h_val = noise(xoff,yoff);
         // Make island
       float bump = 1.25 - 1.25*(1 - pow((2.0*x/width - 1.0),2) ) * (1 - pow((2.0*y/height - 1.0),2));
-      h_val = (h_val + (1-bump))/2;      
+      h_val = (h_val + (1-bump))/2;
       height_map_.pixels[x+y*width] = (int) (h_val*255);
       
       // Biomes
@@ -81,13 +83,24 @@ void draw() {
     for (int x = 0; x < width-step_size; x+=step_size) {
       for (int y = 0; y < height-step_size; y+=step_size) {
         // This is based on the lookup table here: https://en.wikipedia.org/wiki/Marching_squares
-        int lookup_val = 0;
-        if (height_map_.pixels[x+y*width] > contour_height) { lookup_val += 8; }  // top-left
-        if (height_map_.pixels[(x+step_size)+y*width] > contour_height) { lookup_val += 4; }  // top-right
-        if (height_map_.pixels[x+(y+step_size)*width] > contour_height) { lookup_val += 1; }  // bottom-left
-        if (height_map_.pixels[(x+step_size)+(y+step_size)*width] > contour_height) { lookup_val += 2; }  // bottom-right
-        
-        if ( (lookup_val!=0) && (lookup_val!=15) ){ print_contour(lookup_val, x, y); }
+        // Contours are printed in local space to minimise parameters to send to the respective functions
+        if (interpolate_contours) {
+          pushMatrix();
+            translate(x, y);
+            print_interpolated_contours(height_map_.pixels[x+y*width], height_map_.pixels[(x+step_size)+y*width], height_map_.pixels[x+(y+step_size)*width], height_map_.pixels[(x+step_size)+(y+step_size)*width]);
+          popMatrix();
+        } else {
+          pushMatrix();
+            translate(x, y);
+            int lookup_val = 0;
+            if (height_map_.pixels[x+y*width] > contour_height) { lookup_val += 8; }  // top-left
+            if (height_map_.pixels[(x+step_size)+y*width] > contour_height) { lookup_val += 4; }  // top-right
+            if (height_map_.pixels[x+(y+step_size)*width] > contour_height) { lookup_val += 1; }  // bottom-left
+            if (height_map_.pixels[(x+step_size)+(y+step_size)*width] > contour_height) { lookup_val += 2; }  // bottom-right
+            
+            if ( (lookup_val!=0) && (lookup_val!=15) ){ print_contour(lookup_val); }
+          popMatrix();
+        }
       }      
     }
     
@@ -95,6 +108,7 @@ void draw() {
     fill(0);
     text("Marching Squares Cell Size: " + str(step_size), 20, 20);
     text("Contour Height: " + str(round(contour_height)), 20, 40);
+    text("Linear Interpolation: " + str(interpolate_contours), 20, 60);
   }
 }
 
@@ -102,41 +116,97 @@ void keyPressed() {
   if (key == 'c') {
     draw_contour = !draw_contour;
   }
+  if (key == 'i') {
+    interpolate_contours = !interpolate_contours;
+  }
 }
 
-void print_contour(int contour_val, int x_offset, int y_offset) {
+void print_interpolated_contours(int t_l_height, int t_r_height, int b_l_height, int b_r_height ) {
+  // t=top, b=bottom, l=left, r=right
+  int contour_val = 0;
+  if (t_l_height > contour_height) { contour_val += 8; }  // top-left
+  if (t_r_height > contour_height) { contour_val += 4; }  // top-right
+  if (b_l_height > contour_height) { contour_val += 1; }  // bottom-left
+  if (b_r_height > contour_height) { contour_val += 2; }  // bottom-right
+  
+  if ( (contour_val == 1) || (contour_val == 14) ) {
+    float p1 = map(contour_height, t_l_height, b_l_height, 0, step_size);
+    float p2 = map(contour_height, b_l_height, b_r_height, 0, step_size);
+    line(0, p1, p2, step_size);
+  } else if ( (contour_val == 2) || (contour_val == 13) ) {
+    float p1 = map(contour_height, t_r_height, b_r_height, 0, step_size);
+    float p2 = map(contour_height, b_l_height, b_r_height, 0, step_size);
+    line(step_size, p1, p2, step_size);
+  } else if ( (contour_val == 3) || (contour_val == 12) ) {
+    float p1 = map(contour_height, t_l_height, b_l_height, 0, step_size);
+    float p2 = map(contour_height, t_r_height, b_r_height, 0, step_size);
+    line(0, p1, step_size, p2);
+  } else if ( (contour_val == 4) || (contour_val == 11) ) {
+    float p1 = map(contour_height, t_l_height, t_r_height, 0, step_size);
+    float p2 = map(contour_height, t_r_height, b_r_height, 0, step_size);
+    line(p1, 0, step_size, p2);
+  } else if (contour_val == 5) {
+    // Same as case 7 or 8
+    float p1 = map(contour_height, t_l_height, t_r_height, 0, step_size);
+    float p2 = map(contour_height, t_l_height, b_l_height, 0, step_size);
+    line(p1, 0, 0, p2);
+    // Same as case 2 or 13
+    float p3 = map(contour_height, t_r_height, b_r_height, 0, step_size);
+    float p4 = map(contour_height, b_l_height, b_r_height, 0, step_size);
+    line(step_size, p3, p4, step_size);
+  } else if ( (contour_val == 6) || (contour_val == 9) ) {
+    float p1 = map(contour_height, t_l_height, t_r_height, 0, step_size);
+    float p2 = map(contour_height, b_l_height, b_r_height, 0, step_size);
+    line(p1, 0, p2, step_size);
+  } else if ( (contour_val == 7) || (contour_val == 8)) {
+    float p1 = map(contour_height, t_l_height, t_r_height, 0, step_size);
+    float p2 = map(contour_height, t_l_height, b_l_height, 0, step_size);
+    line(p1, 0, 0, p2);
+  } else if (contour_val == 10) {
+    // Same as case 1 or 14
+    float p1 = map(contour_height, t_l_height, b_l_height, 0, step_size);
+    float p2 = map(contour_height, b_l_height, b_r_height, 0, step_size);
+    line(0, p1, p2, step_size);
+    // Same as case 4 or 11
+    float p3 = map(contour_height, t_l_height, t_r_height, 0, step_size);
+    float p4 = map(contour_height, t_r_height, b_r_height, 0, step_size);
+    line(p3, 0, step_size, p4);
+  }
+}
+
+void print_contour(int contour_val) {
   stroke(contour);
   // This is based on the lookup table here: https://en.wikipedia.org/wiki/Marching_squares
   // TODO: Interpolate between actual heights, rather than using midpoints
   if (contour_val == 1) {
-    line(x_offset, y_offset+step_size/2, x_offset+step_size/2, y_offset+step_size);
+    line(0, step_size/2, step_size/2, step_size);
   } else if (contour_val == 2) {
-    line(x_offset+step_size, y_offset+step_size/2, x_offset+step_size/2, y_offset+step_size);
+    line(step_size, step_size/2, step_size/2, step_size);
   } else if (contour_val == 3) {
-    line(x_offset, y_offset+step_size/2, x_offset+step_size, y_offset+step_size/2);
+    line(0, step_size/2, step_size, step_size/2);
   } else if (contour_val == 4) {
-    line(x_offset+step_size/2, y_offset, x_offset+step_size, y_offset+step_size/2);
+    line(step_size/2, 0, step_size, step_size/2);
   } else if (contour_val == 5) {
-    line(x_offset, y_offset+step_size/2, x_offset+step_size/2, y_offset);
-    line(x_offset+step_size, y_offset+step_size/2, x_offset+step_size/2, y_offset+step_size);
+    line(0, step_size/2, step_size/2, 0);
+    line(step_size, step_size/2, step_size/2, step_size);
   } else if (contour_val == 6) {
-    line(x_offset+step_size/2, y_offset, x_offset+step_size/2, y_offset+step_size);
+    line(step_size/2, 0, step_size/2, step_size);
   } else if (contour_val == 7) {
-    line(x_offset, y_offset+step_size/2, x_offset+step_size/2, y_offset);
+    line(0, step_size/2, step_size/2, 0);
   } else if (contour_val == 8) {
-    line(x_offset, y_offset+step_size/2, x_offset+step_size/2, y_offset);
+    line(0, step_size/2, step_size/2, 0);
   } else if (contour_val == 9) {
-    line(x_offset+step_size/2, y_offset, x_offset+step_size/2, y_offset+step_size);
+    line(step_size/2, 0, step_size/2, step_size);
   } else if (contour_val == 10) {
-    line(x_offset, y_offset+step_size/2, x_offset+step_size/2, y_offset+step_size);
-    line(x_offset+step_size/2, y_offset, x_offset+step_size, y_offset+step_size/2);
+    line(0, step_size/2, step_size/2, step_size);
+    line(step_size/2, 0, step_size, step_size/2);
   } else if (contour_val == 11) {
-    line(x_offset+step_size/2, y_offset, x_offset+step_size, y_offset+step_size/2);
+    line(step_size/2, 0, step_size, step_size/2);
   } else if (contour_val == 12) {
-    line(x_offset, y_offset+step_size/2, x_offset+step_size, y_offset+step_size/2);
+    line(0, step_size/2, step_size, step_size/2);
   } else if (contour_val == 13) {
-    line(x_offset+step_size, y_offset+step_size/2, x_offset+step_size/2, y_offset+step_size);
+    line(step_size, step_size/2, step_size/2, step_size);
   } else if (contour_val == 14) {
-    line(x_offset, y_offset+step_size/2, x_offset+step_size/2, y_offset+step_size);
+    line(0, step_size/2, step_size/2, step_size);
   }
 }
