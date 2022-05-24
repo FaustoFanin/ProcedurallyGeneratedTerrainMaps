@@ -5,9 +5,11 @@
 A brief experiment in generating procedurally generated terrain maps.
 
 Main idea is generating a height map from Perlin noise, colouring  the pixel or quad in question based on a height look-up, then finally display.
+Also added a marching squares algorithm.
 
 Repo contains 2 sub-projects:
 - **TerrainGenerator2D** - Standard 2D perlin noise used to generate heightmap, which is then modified to create an island by pushing down image edges and pulling up the center. N.B. Opens in fullscreen because why not.
+  - Hint: Press 'c' to toggle the marching squares algorithm.
 - **TerrainGenerator3D** - Experiment in porting TerrainGenerator2D into 3D, using P3D in Processing. Main aim/challenge was to create the mesh generation code. Takes a while to generate mesh but runs fairly smoothly.
 
 ### Inspiration
